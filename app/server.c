@@ -7,6 +7,16 @@
 #include <errno.h>
 #include <unistd.h>
 
+#define HTTP_200_RESPONSE	"HTTP/1.1 200 OK\r\n\r\n"
+static char buf_recv[128];
+static char buf_send[128];
+static int send_len;
+static void connect_handle(int client_fd){
+	read(client_fd, buf_recv, sizeof(buf_recv));
+	send_len = sprintf(buf_send, "%s", HTTP_200_RESPONSE);
+	write(client_fd, buf_send, send_len);
+	close(client_fd);
+}
 int main() {
 	// Disable output buffering
 	setbuf(stdout, NULL);
@@ -53,9 +63,11 @@ int main() {
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
 	
-	accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+	int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
 	printf("Client connected\n");
 	
+	connect_handle(client_fd);
+
 	close(server_fd);
 
 	return 0;
