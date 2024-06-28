@@ -6,14 +6,103 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-
 #define HTTP_200_RESPONSE	"HTTP/1.1 200 OK\r\n\r\n"
+#define HTTP_404_RESPONSE	"HTTP/1.1 404 Not Found\r\n\r\n"
+struct request_t{
+	int method;	//1-GET 2-POST
+	char *url_path;
+	char *http_v;
+	char *user_agent;
+
+	char *text;
+};
+
 static char buf_recv[128];
 static char buf_send[128];
 static int send_len;
+
+/**
+ * @brief Set the starting and ending strings and extract the middle content
+ * @param src source src
+ * @param s_str starting strings
+ * @param e_str ending strings
+ * @return return the middle string
+ */
+static char *str_skip_get(const char *src, const char *s_str, const char *e_str)
+{
+	unsigned int i=0, j=0;
+	int index=0;
+	char *get_str=NULL;
+	char *sstr=NULL, *eend=NULL;
+	for(index=0; index<strlen(src); index++){
+		if(src[index] == *s_str){
+			if(strlen(s_str) == 1){
+				i=index;
+				break;
+			} else if(strlen(s_str) > 1){
+				if(strncmp(&src[index], s_str, strlen(s_str)) == 0){
+					i=index;
+					break;
+				}else{
+					continue;
+				}
+			}
+		}
+	}
+	if(i==index){
+		index+=strlen(s_str);
+		i = index;
+	} else{
+		i = ~(0);
+	}
+	for(; index<strlen(src); ++index){
+		if(src[index] == *e_str){
+			if(strlen(e_str) == 1){
+				j=index;
+				break;
+			} else if(strlen(e_str)>1){
+				if(strncmp(&src[index], e_str, strlen(e_str)) == 0){
+					j=index;
+					break;
+				}else{
+					continue;
+				}
+			}
+		}
+	}
+	
+	if(i != -1 && j != -1 && j > i){
+		get_str = (char*)malloc(j-i+1);
+		memset(get_str, '\0', j-i+1);
+		strncpy(get_str, &src[i], j-i);
+	} else if(i==j && i!= -1){
+		get_str = (char*)malloc(2);
+		*get_str = src[i];
+		*(get_str+1) = '\0';
+	}
+	return get_str;
+
+}
+
 static void connect_handle(int client_fd){
+	struct request_t request;
+	char *urlpath = NULL;
 	read(client_fd, buf_recv, sizeof(buf_recv));
-	send_len = sprintf(buf_send, "%s", HTTP_200_RESPONSE);
+	request.url_path = str_skip_get(buf_recv, "GET ", " ");
+	if(request.url_path != NULL){
+		request.method = 1;
+		if(strlen(request.url_path) == 1){
+			send_len = sprintf(buf_send, "%s", HTTP_200_RESPONSE);
+		} else{
+			//printf("%ld, %s\n",strlen(request.url_path), request.url_path);
+			if(strncmp(request.url_path, "/index.html", strlen("/index.html")) == 0){
+				send_len = sprintf(buf_send, "%s", HTTP_200_RESPONSE);
+			}else{
+				send_len = sprintf(buf_send, "%s", HTTP_404_RESPONSE);
+			}
+		}
+	}
+	
 	write(client_fd, buf_send, send_len);
 	close(client_fd);
 }

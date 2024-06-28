@@ -7,5 +7,6 @@
 # DON'T EDIT THIS!
 set -e
 tmpFile=$(mktemp)
-gcc -lcurl -lz app/*.c -o $tmpFile
+# gcc -lcurl -lz app/*.c -o $tmpFile
+gcc -lz app/*.c -o $tmpFile
 exec "$tmpFile" "$@"
