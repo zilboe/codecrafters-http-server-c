@@ -12,6 +12,7 @@
 #define HTTP_200_CONT		"HTTP/1.1 200 OK"
 #define HTTP_CONT_TYPE_TEXT	"Content-Type: text/plain" 
 #define HTTP_CONT_LEN		"Content-Length: "
+#define HTTP_USER_AGENT		"User-Agent: "
 struct request_t{
 	int method;	//1-GET 2-POST
 	char *url_path;
@@ -21,30 +22,21 @@ struct request_t{
 	char *text;
 };
 
+//============= string process function===================
 static char *str_skip_st_to_ed_get(const char *src, const char *s_str, const char *e_str);
-static char *str_skip_st(const char *src, const char *s_str)
-{
-	char *get_str=NULL;
-	int index = 0;
-	for(index=0; index<strlen(src); index++){
-		if(src[index] == *s_str){
-			if(strlen(s_str) == 1){
-				break;
-			} else if(strlen(s_str) > 1){
-				if(strncmp(&src[index], s_str, strlen(s_str)) == 0){
-					break;
-				}else{
-					continue;
-				}
-			}
-		}
-	}
-	if(index != strlen(src)){
-		return (char*)&src[index+strlen(s_str)];
-	}else{
-		return NULL;
-	}
-}
+static void free_struct(struct request_t *r_q);
+static char *str_skip_st(const char *src, const char *s_str);
+
+//========================================================
+//============= connect process function==================
+static int process_get_request(struct request_t *request);
+
+//========================================================
+
+//============= memory process function===================
+static void free_struct(struct request_t *r_q);
+static void init_struct(struct request_t *r_q);
+//========================================================
 
 static char buf_recv[128];
 static char buf_send[128];
@@ -52,41 +44,102 @@ static int send_len;
 
 static void connect_handle(int client_fd){
 	struct request_t request;
-	char *echo_str = NULL;
+	init_struct(&request);
+	request.method = 0;
+	request.http_v = NULL;
+	memset(buf_recv, '\0', sizeof(buf_recv));
 	read(client_fd, buf_recv, sizeof(buf_recv));
 	request.url_path = str_skip_st_to_ed_get(buf_recv, "GET ", " ");
 	if(request.url_path != NULL){
-		request.method = 1;
-		if(strlen(request.url_path) == 1){
-			send_len = sprintf(buf_send, "%s\r\n", HTTP_200_RESPONSE);
-		} else{
-			printf("%s\n", request.url_path);
-			if(strncmp(request.url_path, "/index.html", strlen("/index.html")) == 0){
-				send_len = sprintf(buf_send, "%s\r\n", HTTP_200_RESPONSE);
-			}else if(strncmp(request.url_path, "/echo/", strlen("/echo/")) == 0){
-				echo_str = str_skip_st(request.url_path, "/echo/");
-				if(echo_str!=NULL){
-					int echo_len = strlen(echo_str);
-					if(*echo_str == ' '){
-						send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
-							HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
-					}else{
-						send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n\r\n%s",HTTP_200_CONT, 
-							HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, echo_str);
-					}
-				}else{
-					send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
-						HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
-				}
-			}else {
-				send_len = sprintf(buf_send, "%s\r\n", HTTP_404_RESPONSE);
-			}
-		}
+		process_get_request(&request);
+		goto end;
 	}
+	request.url_path = str_skip_st_to_ed_get(buf_recv, "POST ", " ");
+	if(request.url_path != NULL){
+		
+	}
+
 	
+end:
+	free_struct(&request);
 	write(client_fd, buf_send, send_len);
 	close(client_fd);
 }
+
+static int process_post_request(struct request_t *request)
+{
+	send_len = sprintf(buf_send, "%s\r\n", HTTP_404_RESPONSE);
+	return 1;
+}
+
+static int process_get_request(struct request_t *request)
+{
+	if(strlen(request->url_path) == 1){
+		send_len = sprintf(buf_send, "%s\r\n", HTTP_200_RESPONSE);
+	} else{
+		printf("%s\n", request->url_path);
+		if(strncmp(request->url_path, "/index.html", strlen("/index.html")) == 0){
+			send_len = sprintf(buf_send, "%s\r\n", HTTP_200_RESPONSE);
+		}else if(strncmp(request->url_path, "/echo/", strlen("/echo/")) == 0){
+			char *echo_str = str_skip_st(request->url_path, "/echo/");
+			if(echo_str!=NULL){
+				int echo_len = strlen(echo_str);
+				if(*echo_str == ' '){
+					send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
+						HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
+				}else{
+					send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n\r\n%s",HTTP_200_CONT, 
+						HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, echo_str);
+				}
+			}else{
+				send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
+					HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
+			}
+		}else if(strncmp(request->url_path, "/user-agent", strlen("/user-agent"))==0){
+			char *user_agent = str_skip_st_to_ed_get(buf_recv, "User-Agent: ", "\r\n");
+			if(user_agent!=NULL){
+				int user_agent_len = strlen(user_agent);
+				if(*user_agent == ' '){
+					send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
+						HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
+				}else{
+					send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n\r\n%s",HTTP_200_CONT,
+								HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, user_agent_len, user_agent);
+				}
+			}else{
+				send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
+					HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
+			}
+		}else {
+			send_len = sprintf(buf_send, "%s\r\n", HTTP_404_RESPONSE);
+		}
+	}
+}
+
+static void init_struct(struct request_t *r_q){
+	r_q->http_v = NULL;
+	r_q->method = 0;
+	r_q->text = NULL;
+	r_q->url_path = NULL;
+	r_q->user_agent = NULL;
+}
+
+static void free_struct(struct request_t *r_q){
+	if(r_q->url_path!=NULL){
+		free(r_q->url_path);
+	}
+	if(r_q->http_v!=NULL){
+		free(r_q->http_v);
+	}
+	if(r_q->text!=NULL){
+		free(r_q->text);
+	}
+	if(r_q->user_agent!=NULL){
+		free(r_q->user_agent);
+	}
+}
+
+
 int main() {
 	// Disable output buffering
 	setbuf(stdout, NULL);
@@ -204,4 +257,34 @@ static char *str_skip_st_to_ed_get(const char *src, const char *s_str, const cha
 	}
 	return get_str;
 
+}
+
+/**
+ * @brief Extract and skip fixed fields from a string(not malloc new memory)
+ * @param src Source string
+ * @param s_str string skip
+ * @return success fetch or fail null
+ */
+static char *str_skip_st(const char *src, const char *s_str)
+{
+	char *get_str=NULL;
+	int index = 0;
+	for(index=0; index<strlen(src); index++){
+		if(src[index] == *s_str){
+			if(strlen(s_str) == 1){
+				break;
+			} else if(strlen(s_str) > 1){
+				if(strncmp(&src[index], s_str, strlen(s_str)) == 0){
+					break;
+				}else{
+					continue;
+				}
+			}
+		}
+	}
+	if(index != strlen(src)){
+		return (char*)&src[index+strlen(s_str)];
+	}else{
+		return NULL;
+	}
 }
