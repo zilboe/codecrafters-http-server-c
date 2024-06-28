@@ -186,10 +186,10 @@ int main() {
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
 	
-	int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
-	printf("Client connected\n");
-	
-	connect_handle(client_fd);
+	while(1){
+		int client_fd = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+		connect_handle(client_fd);
+	}
 
 	close(server_fd);
 
