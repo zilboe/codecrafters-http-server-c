@@ -160,9 +160,9 @@ static int process_get_request(struct request_t *request)
 				int echo_len = strlen(echo_str);
 				if(*echo_str == ' '){
 					if(request->encoding!=NULL){
-						if(strcmp(request->encoding, "gzip") == 0){
+						if(strstr(request->encoding, "gzip") != NULL){
 							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n%s%s\r\n\r\n",HTTP_200_CONT, 
-								HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, HTTP_CODING_RESPONSE, request->encoding);
+								HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, HTTP_CODING_RESPONSE, "gzip");
 						}else{
 							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
 								HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
@@ -173,9 +173,9 @@ static int process_get_request(struct request_t *request)
 					}
 				}else{
 					if(request->encoding!=NULL){
-						if(strcmp(request->encoding, "gzip")==0){
+						if(strstr(request->encoding, "gzip") != NULL){
 							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n%s%s\r\n\r\n%s",HTTP_200_CONT, 
-									HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, HTTP_CODING_RESPONSE, request->encoding, echo_str);
+									HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, HTTP_CODING_RESPONSE, "gzip", echo_str);
 						}else{
 							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n\r\n%s",HTTP_200_CONT, 
 									HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, echo_str);
