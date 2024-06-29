@@ -7,9 +7,12 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #define HTTP_200_RESPONSE	"HTTP/1.1 200 OK\r\n"
 #define HTTP_404_RESPONSE	"HTTP/1.1 404 Not Found\r\n"
+#define HTTP_201_RESPONSE	"HTTP/1.1 201 Created\r\n"
 #define HTTP_200_CONT		"HTTP/1.1 200 OK"
 #define HTTP_CONT_TYPE_TEXT	"Content-Type: text/plain" 
 #define HTTP_CONT_TYPE_STREAM	"Content-Type: application/octet-stream"
@@ -17,7 +20,6 @@
 #define HTTP_USER_AGENT		"User-Agent: "
 
 struct request_t{
-	int method;	//1-GET 2-POST
 	char *url_path;
 	char *http_v;
 	char *user_agent;
@@ -27,7 +29,6 @@ struct request_t{
 
 //============= string process function===================
 static char *str_skip_st_to_ed_get(const char *src, const char *s_str, const char *e_str);
-static void free_struct(struct request_t *r_q);
 static char *str_skip_st(const char *src, const char *s_str);
 
 //========================================================
@@ -46,14 +47,13 @@ static void process_arg(int argc, const char *argv[]);
 
 //========================================================
 static char files[256];
-static char buf_recv[128];
+static char buf_recv[1024];
 static char buf_send[512];
 static int send_len;
 static char *file_path;
 static void connect_handle(int client_fd){
 	struct request_t request;
 	init_struct(&request);
-	request.method = 0;
 	request.http_v = NULL;
 	memset(buf_recv, '\0', sizeof(buf_recv));
 	read(client_fd, buf_recv, sizeof(buf_recv));
@@ -73,9 +73,73 @@ end:
 	close(client_fd);
 }
 
+
+static int str_get_ch_num(char *str, int len, const char ch)
+{
+	int ret = 0;
+	for(int i=0; i<len; i++){
+		if(ch == str[i]){
+			ret += 1;
+		}
+	}
+	return ret;
+}
+
 static int process_post_request(struct request_t *request)
 {
-	send_len = sprintf(buf_send, "%s\r\n", HTTP_404_RESPONSE);
+	if(strlen(request->url_path) == 1){
+
+	}else{
+		if(strncmp(request->url_path, "/files/", strlen("/files/")) == 0){
+			char *urls = str_skip_st(request->url_path, "/files/");
+			if(*urls != ' '){
+				if(file_path!=NULL){
+					printf("url path is %s\n", urls);
+					char *url_path = (char*)malloc(strlen(file_path)+strlen(urls)+1);
+					memset(url_path, '\0', strlen(file_path)+strlen(urls)+1);
+					strcat(url_path, file_path);	/* /tmp/ */
+					strcat(url_path, urls);	/* /tmp/file_123 */
+					int url_path_len = strlen(url_path);
+					int slash_num = str_get_ch_num(urls, strlen(urls), '/');
+					char *content_len = str_skip_st_to_ed_get(buf_recv, "Content-Length: ", "\r\n\r\n");
+					int file_size = atoi(content_len);
+					char *content_text = str_skip_st(buf_recv, "\r\n\r\n");
+					printf("slash_num is %d\n", slash_num);
+					if(slash_num == 0){
+						if(file_size != 0){
+							int fd = open(url_path, O_CREAT|O_RDWR);
+							if(content_text != NULL){
+								if(fd != -1){
+									write(fd, content_text, file_size);
+								}
+							}
+							close(fd);
+						}
+						free(content_len);
+					}else{
+						int temp_url_len = strlen(url_path);
+						if(file_size!=0){
+							for(int i=0; i<temp_url_len; i++){
+								if(url_path[i] == '/'){
+									url_path[i] = '\0';
+									mkdir(url_path, 0777);
+									url_path[i] = '/';
+								}
+							}
+							int fd = open(url_path, O_CREAT|O_RDWR);
+							if(fd!=-1){
+								write(fd, content_text, file_size);
+							}
+							close(fd);
+						}
+						free(content_len);
+					}
+					send_len = sprintf(buf_send, "%s\r\n", HTTP_201_RESPONSE);
+				}
+			}
+		}
+	}
+	
 	return 1;
 }
 
@@ -159,7 +223,6 @@ static int process_get_request(struct request_t *request)
 
 static void init_struct(struct request_t *r_q){
 	r_q->http_v = NULL;
-	r_q->method = 0;
 	r_q->text = NULL;
 	r_q->url_path = NULL;
 	r_q->user_agent = NULL;
