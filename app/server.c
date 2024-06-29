@@ -18,11 +18,13 @@
 #define HTTP_CONT_TYPE_STREAM	"Content-Type: application/octet-stream"
 #define HTTP_CONT_LEN		"Content-Length: "
 #define HTTP_USER_AGENT		"User-Agent: "
-
+#define HTTP_ACCEPT_CODEING		"Accept-Encoding: "
+#define HTTP_CODING_RESPONSE	"Content-Encoding: "
 struct request_t{
 	char *url_path;
 	char *http_v;
 	char *user_agent;
+	char *encoding;
 
 	char *text;
 };
@@ -58,6 +60,7 @@ static void connect_handle(int client_fd){
 	memset(buf_recv, '\0', sizeof(buf_recv));
 	read(client_fd, buf_recv, sizeof(buf_recv));
 	request.url_path = str_skip_st_to_ed_get(buf_recv, "GET ", " ");
+	request.encoding = str_skip_st_to_ed_get(buf_recv, HTTP_ACCEPT_CODEING, "\r\n");
 	if(request.url_path != NULL){
 		process_get_request(&request);
 		goto end;
@@ -156,11 +159,31 @@ static int process_get_request(struct request_t *request)
 			if(echo_str!=NULL){
 				int echo_len = strlen(echo_str);
 				if(*echo_str == ' '){
-					send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
-						HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
+					if(request->encoding!=NULL){
+						if(strcmp(request->encoding, "gzip") == 0){
+							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n%s%s\r\n\r\n",HTTP_200_CONT, 
+								HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, HTTP_CODING_RESPONSE, request->encoding);
+						}else{
+							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
+								HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
+						}
+					}else{
+						send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
+							HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN);
+					}
 				}else{
-					send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n\r\n%s",HTTP_200_CONT, 
+					if(request->encoding!=NULL){
+						if(strcmp(request->encoding, "gzip")==0){
+							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n%s%s\r\n\r\n%s",HTTP_200_CONT, 
+									HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, HTTP_CODING_RESPONSE, request->encoding, echo_str);
+						}else{
+							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n\r\n%s",HTTP_200_CONT, 
+									HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, echo_str);
+						}
+					}else{
+						send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n\r\n%s",HTTP_200_CONT, 
 						HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, echo_str);
+					}
 				}
 			}else{
 				send_len = sprintf(buf_send, "%s\r\n%s\r\n%s0\r\n\r\n",HTTP_200_CONT, 
@@ -226,6 +249,7 @@ static void init_struct(struct request_t *r_q){
 	r_q->text = NULL;
 	r_q->url_path = NULL;
 	r_q->user_agent = NULL;
+	r_q->encoding = NULL;
 }
 
 static void free_struct(struct request_t *r_q){
@@ -240,6 +264,9 @@ static void free_struct(struct request_t *r_q){
 	}
 	if(r_q->user_agent!=NULL){
 		free(r_q->user_agent);
+	}
+	if(r_q->encoding!=NULL){
+		free(r_q->encoding);
 	}
 }
 
