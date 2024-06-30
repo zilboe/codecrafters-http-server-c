@@ -26,7 +26,6 @@ struct request_t{
 	char *http_v;
 	char *user_agent;
 	char *encoding;
-
 	char *text;
 };
 
@@ -66,14 +65,11 @@ static void connect_handle(int client_fd){
 	request.encoding = str_skip_st_to_ed_get(buf_recv, HTTP_ACCEPT_CODEING, "\r\n");
 	if(request.url_path != NULL){
 		process_get_request(&request);
-		goto end;
 	}
 	request.url_path = str_skip_st_to_ed_get(buf_recv, "POST ", " ");
 	if(request.url_path != NULL){
 		process_post_request(&request);
-		goto end;
 	}
-end:
 	write(client_fd, buf_send, send_len);
 	// if(strstr(request.encoding, "gzip") != NULL){
 	// 	write(client_fd, gzip_buff, gzip_len);
@@ -103,9 +99,6 @@ int data_compress(char *idata, int ilen, char *odata, int *olen)
     z.next_out = odata;
     z.avail_out = *olen;
  
-    //printf("total %u bytes\n", z.avail_in);
- 
-    /* 使用最高压缩比 */
     deflateInit2(&z, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8,
                Z_DEFAULT_STRATEGY);
 
@@ -114,8 +107,6 @@ int data_compress(char *idata, int ilen, char *odata, int *olen)
     deflateEnd(&z);
  
     *olen = *olen - z.avail_out;
-
-    //printf("compressed data %d bytes.\n", *olen);
 
     return 0;
 }
@@ -321,6 +312,7 @@ static void process_arg(int argc, const char *argv[])
 	if(strcmp(temp_method,"directory") == 0){
 		file_path = (char*)argv[argc+1];
 	}
+
 }
 
 int main(int argc, const char *argv[]) {
