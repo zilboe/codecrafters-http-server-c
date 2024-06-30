@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -9,7 +10,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
+#include "zlib.h"
 #define HTTP_200_RESPONSE	"HTTP/1.1 200 OK\r\n"
 #define HTTP_404_RESPONSE	"HTTP/1.1 404 Not Found\r\n"
 #define HTTP_201_RESPONSE	"HTTP/1.1 201 Created\r\n"
@@ -49,9 +50,11 @@ static void process_arg(int argc, const char *argv[]);
 
 //========================================================
 static char files[256];
-static char buf_recv[1024];
-static char buf_send[512];
-static int send_len;
+static char buf_recv[4096];
+static char buf_send[4096];
+static char gzip_buff[4096];
+static unsigned int gzip_len=4096;
+static unsigned int send_len=0;
 static char *file_path;
 static void connect_handle(int client_fd){
 	struct request_t request;
@@ -71,8 +74,11 @@ static void connect_handle(int client_fd){
 		goto end;
 	}
 end:
-	free_struct(&request);
 	write(client_fd, buf_send, send_len);
+	// if(strstr(request.encoding, "gzip") != NULL){
+	// 	write(client_fd, gzip_buff, gzip_len);
+	// }
+	free_struct(&request);
 	close(client_fd);
 }
 
@@ -87,6 +93,33 @@ static int str_get_ch_num(char *str, int len, const char ch)
 	}
 	return ret;
 }
+
+int data_compress(char *idata, int ilen, char *odata, int *olen)
+{
+    z_stream z = {0};
+
+    z.next_in = idata;
+    z.avail_in = ilen;
+    z.next_out = odata;
+    z.avail_out = *olen;
+ 
+    //printf("total %u bytes\n", z.avail_in);
+ 
+    /* 使用最高压缩比 */
+    deflateInit2(&z, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8,
+               Z_DEFAULT_STRATEGY);
+
+    deflate(&z, Z_FINISH);
+
+    deflateEnd(&z);
+ 
+    *olen = *olen - z.avail_out;
+
+    //printf("compressed data %d bytes.\n", *olen);
+
+    return 0;
+}
+
 
 static int process_post_request(struct request_t *request)
 {
@@ -151,7 +184,7 @@ static int process_get_request(struct request_t *request)
 	if(strlen(request->url_path) == 1){
 		send_len = sprintf(buf_send, "%s\r\n", HTTP_200_RESPONSE);
 	} else{
-		printf("%s\n", request->url_path);
+		//printf("%s\n", request->url_path);
 		if(strncmp(request->url_path, "/index.html", strlen("/index.html")) == 0){
 			send_len = sprintf(buf_send, "%s\r\n", HTTP_200_RESPONSE);
 		}else if(strncmp(request->url_path, "/echo/", strlen("/echo/")) == 0){
@@ -174,8 +207,15 @@ static int process_get_request(struct request_t *request)
 				}else{
 					if(request->encoding!=NULL){
 						if(strstr(request->encoding, "gzip") != NULL){
-							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n%s%s\r\n\r\n%s",HTTP_200_CONT, 
-									HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, HTTP_CODING_RESPONSE, "gzip", echo_str);
+							int echo_len = strlen(echo_str);
+							data_compress(echo_str, echo_len, gzip_buff, &gzip_len);
+							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n%s%s\r\n\r\n",HTTP_200_CONT, 
+									HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, gzip_len, HTTP_CODING_RESPONSE, "gzip");
+							for(int i=0;i<gzip_len;i++){
+								buf_send[send_len+i] = gzip_buff[i];
+							}
+							send_len += gzip_len;
+							//printf("%s\n", buf_send);
 						}else{
 							send_len = sprintf(buf_send, "%s\r\n%s\r\n%s%d\r\n\r\n%s",HTTP_200_CONT, 
 									HTTP_CONT_TYPE_TEXT, HTTP_CONT_LEN, echo_len, echo_str);
